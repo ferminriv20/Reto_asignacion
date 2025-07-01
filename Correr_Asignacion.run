@@ -1,0 +1,136 @@
+reset;
+shell "cls";
+
+model Asignacion.mod;
+#data Instancia1.dat;
+
+option solver gurobi;
+options gurobi_options "obj:multi = 1 outlev = 1 timelim = 900 mipgap = 0.01";
+option omit_zero_rows 1;
+option log_file "log.txt";
+
+printf "@ echo off\nif exist Resultados echo FOLDER Resultados ALREADY EXISTS \necho .\n echo .\n echo .\nif not exist Resultados mkdir Resultados\n" > CreateResultsDirectory.bat;
+	close CreateResultsDirectory.bat;
+	shell 'CreateResultsDirectory.bat';
+	
+printf "@ echo off\nif exist Variable_f echo FOLDER Variable_f ALREADY EXISTS \necho .\n echo .\n echo .\nif not exist Variable_f mkdir Variable_f\n" > CreateResultsDirectory.bat;
+	close CreateResultsDirectory.bat;
+	shell 'CreateResultsDirectory.bat';
+	
+printf "@ echo off\nif exist Variable_y echo FOLDER Variable_y ALREADY EXISTS \necho .\n echo .\n echo .\nif not exist Variable_y mkdir Variable_y\n" > CreateResultsDirectory.bat;
+	close CreateResultsDirectory.bat;
+	shell 'CreateResultsDirectory.bat';
+	
+printf "@ echo off\nif exist Variable_Reunion_G echo FOLDER Variable_Reunion_G ALREADY EXISTS \necho .\n echo .\n echo .\nif not exist Variable_Reunion_G mkdir Variable_Reunion_G\n" > CreateResultsDirectory.bat;
+	close CreateResultsDirectory.bat;
+	shell 'CreateResultsDirectory.bat';
+
+
+# Comprobando que la normalización de FO1 Funcione
+
+/*
+printf "normz2_l \t normz2_u \t z2 \t norm_z2 \n" >("Resultados"&"\pruebanorm.xls");
+for {i in 1..10}{
+	reset data;
+	data ("instancia" & i & ".dat");
+	# Normalizando FO1
+	for {e in E}{
+	if sum{t in T} Preferencia[e,t] < 2 then {let normz1 := normz1 + (sum {t in T} Preferencia[e,t] * (1+Boni) + 1)} else {let normz1 := normz1 + sum{t in T}Preferencia[e,t] * (1+Boni)}
+	};
+	
+	solve z1;
+	
+	printf "%0.0f \t %0.0f \t %0.0f \t %0.3f \n", normz2_l, normz2_u ,(z2*(normz2_u - normz2_l)) + normz2_l, z2 >("Resultados"&"\pruebanorm.xls");
+}	
+*/
+
+# Indicadores
+# total de asignaciones
+param asignaciones;
+
+# % de preferencias cumplidas respecto al total de asignaciones
+param _preferencias; 
+
+# Puestos totales disponibles y % de ocupación 
+param puestos_totales;
+
+param _ocupacion;
+
+# Empleados por grupo asignados a una zona
+param emp_grupo{g in G, z in Z, t in T};
+
+/*
+for {z in Z, g in G, t in T}{	
+	display emp_grupo[g,z,t];
+}
+
+printf "%"
+*/
+/*
+display emp_grupo;
+display z1, z2;
+*/
+for {j in 1..5}{
+printf "  Instancia \t alfa \t  Tiempo  \t Z1_Norm \t Z2_Norm \t z1 \t z2 \t Z_total \t # Asignaciones \t  Preferencias  \t  % asignados " >("Resultados"&"\Indicadores.xls");
+printf "\n" >("Resultados"&"\Indicadores.xls");
+	for {i in 1..10}{
+		printf "----------------- Resolviendo la instancia %d ------------------- \n",i;
+		reset data;
+		data ("instancia" & i & ".dat");
+	
+		# Normalizando FO1
+		for {e in E}{
+		if sum{t in T} Preferencia[e,t] < 2 then {let normz1 := normz1 + (sum {t in T} Preferencia[e,t] * (1+Boni) + 1)} else {let normz1 := normz1 + sum{t in T}Preferencia[e,t] * (1+Boni)}
+		};
+		
+		# Asignando valores a los alpha
+		let alpha := ((j-1)/5) + (0.05*(j-1));
+	
+		solve z_total;
+	
+		#Calculo indicadores
+		let asignaciones := (sum{e in E, d in D, t in T}y[e,d,t]);
+		let _preferencias := ((sum{e in E, d in D, t in T}y[e,d,t]*Preferencia[e,t])/(sum{e in E, d in D, t in T}y[e,d,t]))*100;
+		let puestos_totales := card(D) * card(T);
+		let _ocupacion := (asignaciones/puestos_totales)*100;
+		for{g in G, z in Z, t in T}{
+		let emp_grupo[g,z,t] := sum{e in E, d in D}y[e,d,t]*EmpGrupo[e,g]*EscZona[d,z];  
+		}
+	
+		printf " %0.0f \t %0.2f \t %0.0f \t %0.3f \t %0.3f \t %0.2f \t %0.2f \t %0.3f \t %0.3f \t %0.3f \t %0.2f ", i, alpha, _solve_time, z1_norm, z2_norm, z1, z2, z_total, asignaciones, _preferencias, _ocupacion >("Resultados"&"\Indicadores.xls"); 
+		printf "\n">("Resultados"&"\Indicadores.xls");
+	
+		#Exportando variables:
+		# Variable de Asignación
+		printf "Variable de Asignacion y Instancia %d alpha %0.2f",i, alpha >("Variable_y"&"\y[edt] Instancia"&i&".xls");
+		printf "\n" >("Variable_y"&"\y[edt] Instancia"&i&".xls");
+		printf "Empleado \t Escritorio \t Dia \t Asignacion" >("Variable_y"&"\y[edt] Instancia"&i&".xls");
+		printf "\n" >("Variable_y"&"\y[edt] Instancia"&i&".xls");
+		for{e in E, d in D, t in T}{
+		printf "%s \t %s \t %s \t %0.0f \n", e, d, t, y[e,d,t] >("Variable_y"&"\y[edt] Instancia"&i&".xls");
+		}
+		printf "\n" >("Variable_y"&"\y[edt] Instancia"&i&".xls");
+	
+		#Variable de asignación de grupos a zonas
+		printf "Variable de asignacion f Instancia %d alpha %0.2f",i, alpha >("Variable_f"&"\f[tzg] Instancia"&i&".xls");
+		printf "\n" >("Variable_f"&"\f[tzg] Instancia"&i&".xls");
+		printf "Dia \t Zona \t Grupo \t Asignacion" >("Variable_f"&"\f[tzg] Instancia"&i&".xls");
+		printf "\n" >("Variable_f"&"\f[tzg] Instancia"&i&".xls");
+		for{t in T, z in Z, g in G}{
+		printf "%s \t %s \t %s \t %0.0f \n", t, z, g, f[t,z,g] >("Variable_f"&"\f[tzg] Instancia"&i&".xls");
+		}
+		printf "\n" >("Variable_f"&"\f[tzg] Instancia"&i&".xls");
+	
+		#Variable de reunion de grupos
+		printf "Variable de asignacion Reunion_G Instancia %d alfa %0.2f",i, alpha >("Variable_Reunion_G"&"\Reunion_G[g,t] Instancia"&i&".xls");
+		printf "\n" >("Variable_Reunion_G"&"\Reunion_G[g,t] Instancia"&i&".xls");
+		printf "Grupo \t Dia \t Asignacion" >("Variable_Reunion_G"&"\Reunion_G[g,t] Instancia"&i&".xls");
+		printf "\n" >("Variable_Reunion_G"&"\Reunion_G[g,t] Instancia"&i&".xls");
+		for{g in G, t in T}{
+		printf "%s \t %s \t %0.0f \n", g, t, Reunion_G[g,t] >("Variable_Reunion_G"&"\Reunion_G[g,t] Instancia"&i&".xls");
+		}
+		printf "\n" >("Variable_Reunion_G"&"\Reunion_G[g,t] Instancia"&i&".xls");
+	}
+
+printf "\n" >("Resultados"&"\Indicadores.xls");
+}
